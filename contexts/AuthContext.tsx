@@ -1,5 +1,5 @@
 import { createContext, ReactNode, useEffect, useState } from "react";
-import { parseCookies, setCookie } from 'nookies'
+import { destroyCookie, parseCookies, setCookie } from 'nookies'
 import Router from "next/router";
 
 import { api } from "../services/api";
@@ -15,8 +15,8 @@ type SignInCredentials = {
     password: string;
 }
 
-type AuthContextData ={
-    signIn(credentials: SignInCredentials) : Promise<void>;
+type AuthContextData = {
+    signIn(credentials: SignInCredentials): Promise<void>;
     user: User;
     isAuthenticated: boolean;
 };
@@ -27,26 +27,39 @@ type AuthProviderProps = {
 
 export const AuthContext = createContext({} as AuthContextData)
 
-export function AuthProvider({ children } : AuthProviderProps) {
+export function signOut() {
+    destroyCookie(undefined, 'nextauth.token')
+    destroyCookie(undefined, 'nextauth.refreshToken')
+
+    Router.push('/');
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
     const [user, setUser] = useState<User>();
     const isAuthenticated = !!user;
     //toda vez que o user acessar pela 1 vez, carregar a informação do usuario novamente
-    useEffect(() =>{
-        const { 'nextauth.token' : token } = parseCookies()
-        if (token){ // se tiver ja um token salvo no navegador
+    useEffect(() => {
+        const { 'nextauth.token': token } = parseCookies()
+
+        if (token) { // se tiver ja um token salvo no navegador
             api.get('/me').then(response => {
-                console.log(response)
+                const { email, permissions, roles } = response.data
+
+                setUser({ email, permissions, roles })
             })
+                .catch(() => {
+                    signOut();
+                })
         }
     }, [])
 
-    async function signIn({email, password }: SignInCredentials) {
+    async function signIn({ email, password }: SignInCredentials) {
         try {
             const response = await api.post('sessions', {
                 email,
                 password
             })
-    
+
             const { token, refreshToken, permissions, roles } = response.data;
 
             setCookie(undefined, 'nextauth.token', token, {// nextauth pode ser o nome do app
@@ -54,8 +67,8 @@ export function AuthProvider({ children } : AuthProviderProps) {
                 path: '/' // qualquer endereço da aplicação tem acesso a essa token
             })
             setCookie(undefined, 'nextauth.refreshToken', refreshToken, {
-                maxAge: 60 * 60 * 24 * 30, 
-                path: '/' 
+                maxAge: 60 * 60 * 24 * 30,
+                path: '/'
             })
 
             setUser({
@@ -63,15 +76,18 @@ export function AuthProvider({ children } : AuthProviderProps) {
                 permissions,
                 roles,
             })
+
+            api.defaults.headers['Authorization'] = `Bearer ${token}`;
+
             Router.push('/dashboard');
-        } catch(err) {
+        } catch (err) {
             console.log(err);
         }
     }
 
     return (
         <AuthContext.Provider value={{ signIn, isAuthenticated, user }}>
-            { children }
+            {children}
         </AuthContext.Provider>
     )
 }
