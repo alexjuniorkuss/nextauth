@@ -1,5 +1,5 @@
-import { createContext, ReactNode, useState } from "react";
-import { setCookie } from 'nookies'
+import { createContext, ReactNode, useEffect, useState } from "react";
+import { parseCookies, setCookie } from 'nookies'
 import Router from "next/router";
 
 import { api } from "../services/api";
@@ -30,6 +30,15 @@ export const AuthContext = createContext({} as AuthContextData)
 export function AuthProvider({ children } : AuthProviderProps) {
     const [user, setUser] = useState<User>();
     const isAuthenticated = !!user;
+    //toda vez que o user acessar pela 1 vez, carregar a informação do usuario novamente
+    useEffect(() =>{
+        const { 'nextauth.token' : token } = parseCookies()
+        if (token){ // se tiver ja um token salvo no navegador
+            api.get('/me').then(response => {
+                console.log(response)
+            })
+        }
+    }, [])
 
     async function signIn({email, password }: SignInCredentials) {
         try {
@@ -40,8 +49,14 @@ export function AuthProvider({ children } : AuthProviderProps) {
     
             const { token, refreshToken, permissions, roles } = response.data;
 
-            setCookie(undefined, 'nextauth.token', token)// nextauth pode ser o nome do app
-            setCookie(undefined, 'nextauth.refreshToken', refreshToken)// nextauth pode ser o nome do app
+            setCookie(undefined, 'nextauth.token', token, {// nextauth pode ser o nome do app
+                maxAge: 60 * 60 * 24 * 30, // 30 dias quem vai ser responsavel por renovar o token nao vai ser o browser
+                path: '/' // qualquer endereço da aplicação tem acesso a essa token
+            })
+            setCookie(undefined, 'nextauth.refreshToken', refreshToken, {
+                maxAge: 60 * 60 * 24 * 30, 
+                path: '/' 
+            })
 
             setUser({
                 email,
