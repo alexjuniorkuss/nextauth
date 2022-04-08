@@ -55,7 +55,7 @@ export  function AuthProvider({ children }: AuthProviderProps) {
                     //authChannel.close();
                     break;
                 case "signIn":
-                    Router.push('/dashboard');
+                    //Router.push('/dashboard');
                     break;
                 default:
                     break;
