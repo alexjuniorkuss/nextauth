@@ -15,7 +15,8 @@ type SignInCredentials = {
 }
 
 type AuthContextData = {
-    signIn(credentials: SignInCredentials): Promise<void>;
+    signIn: (credentials: SignInCredentials) => Promise<void>;
+    signOut: () => void;
     user: User;
     isAuthenticated: boolean;
 };
@@ -26,17 +27,42 @@ type AuthProviderProps = {
 
 export const AuthContext = createContext({} as AuthContextData)
 
-export function signOut() {
-    destroyCookie(undefined, 'nextauth.token')
-    destroyCookie(undefined, 'nextauth.refreshToken')
+let authChannel: BroadcastChannel;
+
+export function signOut(broadcast: boolean = true) {
+    destroyCookie(undefined, 'nextauth.token');
+    destroyCookie(undefined, 'nextauth.refreshToken');
+    if (broadcast){
+        authChannel.postMessage('signOut');   
+    } 
 
     Router.push('/');
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export  function AuthProvider({ children }: AuthProviderProps) {
     const [user, setUser] = useState<User>();
     const isAuthenticated = !!user;
     //toda vez que o user acessar pela 1 vez, carregar a informação do usuario novamente
+
+    useEffect(() => {
+        authChannel = new BroadcastChannel('auth');
+
+        authChannel.onmessage = async (message) => {
+            console.log(message);
+            switch (message.data) {
+                case 'signOut':
+                     signOut(false);
+                    //authChannel.close();
+                    break;
+                case "signIn":
+                    Router.push('/dashboard');
+                    break;
+                default:
+                    break;
+            }
+        };
+    }, []);
+
     useEffect(() => {
         const { 'nextauth.token': token } = parseCookies()
 
@@ -76,16 +102,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 roles,
             })
 
-            api.defaults.headers['Authorization'] = `Bearer ${token}`;
+            api.defaults.headers["Authorization"] = `Bearer ${token}`;
 
-            Router.push('/dashboard');
+            Router.push("/dashboard");
+            authChannel.postMessage("signIn"); 
         } catch (err) {
             console.log(err);
         }
     }
 
     return (
-        <AuthContext.Provider value={{ signIn, isAuthenticated, user }}>
+        <AuthContext.Provider value={{ signIn, signOut, isAuthenticated, user }}>
             {children}
         </AuthContext.Provider>
     )
